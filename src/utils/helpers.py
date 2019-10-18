@@ -98,7 +98,7 @@ def delete_files_from_name(folder_path, file_name, type='contains'):
             os.remove(os.path.join(folder_path, f))
 
 
-def set_torch_seeds(seed):
+def set_tensorflow_seeds(seed):
     random.seed(seed)
     np.random.seed(seed)
     tf.set_random_seed(seed)
