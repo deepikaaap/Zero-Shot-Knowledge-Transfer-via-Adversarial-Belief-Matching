@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', default=0.1, help='momentum')
     parser.add_argument('--batch_size', default=64, help='size of the batch of images for training')
     parser.add_argument('--learning_rate', default=1e-5)
-    parser.add_argument('--epochs', default=1)
+    parser.add_argument('--epochs', default=200)
     parser.add_argument('--shuffle', default=True, help='True to Shuffle data')
     parser.add_argument('--save_model_weights', default=True)
     parser.add_argument('--path_to_save_model',
