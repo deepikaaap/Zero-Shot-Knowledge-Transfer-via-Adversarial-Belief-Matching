@@ -25,14 +25,16 @@ class WideResNet():
 
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
 
-        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon, gamma_initializer=self.gamma_initializer)(x)
+        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
+                               gamma_initializer=self.gamma_initializer)(x)
         x = Activation('relu')(x)
 
         x = Convolution2D(base * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
                           W_regularizer=l2(self.weight_decay),
                           use_bias=False)(x)
 
-        skip = Convolution2D(base * k, (1, 1), padding='same', strides=strides, kernel_initializer=self.kernel_initializer,
+        skip = Convolution2D(base * k, (1, 1), padding='same', strides=strides,
+                             kernel_initializer=self.kernel_initializer,
                              W_regularizer=l2(self.weight_decay),
                              use_bias=False)(init)
 
@@ -40,13 +42,13 @@ class WideResNet():
 
         return m
 
-
     def basic_block(self, input, channels, k=1):
         init = input
 
         channel_axis = 1 if K.common.image_dim_ordering() == "th" else -1
 
-        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon, gamma_initializer=self.gamma_initializer)(input)
+        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
+                               gamma_initializer=self.gamma_initializer)(input)
         x = Activation('relu')(x)
         x = Convolution2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
                           W_regularizer=l2(self.weight_decay),
@@ -54,7 +56,8 @@ class WideResNet():
 
         if self.dropout > 0.0: x = Dropout(self.dropout)(x)
 
-        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon, gamma_initializer=self.gamma_initializer)(x)
+        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
+                               gamma_initializer=self.gamma_initializer)(x)
         x = Activation('relu')(x)
         x = Convolution2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
                           W_regularizer=l2(self.weight_decay),
@@ -63,22 +66,21 @@ class WideResNet():
         m = Add()([init, x])
         return m
 
-
     def build_Network_Block(self, x, N, nChannels, k):
         for i in range(N - 1):
             x = self.basic_block(x, nChannels, k)
 
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon, gamma_initializer=self.gamma_initializer)(x)
+        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
+                               gamma_initializer=self.gamma_initializer)(x)
         x = Activation('relu')(x)
 
         return x
 
-
-    def build_wide_resnet(self, input_dim, nb_classes=100, N=2, k=1):
+    def build_wide_resnet(self, input_dim, nb_classes=100, d=40, k=1):
         nChannels = [16, 16, 32, 64]
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-
+        N = int((d - 4) / 6)
         ip = Input(shape=input_dim)
 
         # Create initial convolution block
@@ -86,7 +88,8 @@ class WideResNet():
                           W_regularizer=l2(self.weight_decay),
                           use_bias=False)(ip)
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
-        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon, gamma_initializer=self.gamma_initializer)(x)
+        x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
+                               gamma_initializer=self.gamma_initializer)(x)
         x = Activation('relu')(x)
 
         # 1 Network Block
@@ -112,10 +115,8 @@ class WideResNet():
 
 
 if __name__ == "__main__":
-
     wresnet = WideResNet('he_normal', 'uniform', 0.0, 1e-5, 0.0005, 0.1)
+    # input image shape
     init = (32, 32, 3)
-
-    wrn_28_10 = wresnet.build_wide_resnet(init, nb_classes=10, N=2, k=2)
-
-    wrn_28_10.summary()
+    wrn = wresnet.build_wide_resnet(init, nb_classes=10, d=40, k=2)
+    wrn.summary()
