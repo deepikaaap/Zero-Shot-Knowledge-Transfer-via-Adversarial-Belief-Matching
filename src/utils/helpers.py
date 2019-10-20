@@ -104,6 +104,14 @@ def set_tensorflow_seeds(seed):
     tf.set_random_seed(seed)
 
 
+def mk_dir(dir):
+    try:
+        os.mkdir(dir)
+    except OSError:
+        # dir already exists
+        pass
+
+
 if __name__ == '__main__':
     scalar = AggregateScalar()
     print(scalar)
