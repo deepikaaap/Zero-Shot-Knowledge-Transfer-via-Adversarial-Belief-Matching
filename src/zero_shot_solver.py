@@ -107,6 +107,9 @@ class ZeroShotKTSolver():
     def run(self, n_g, n_s, teacher_epochs, args):
         self.args = args
 
+        mu, sigma, N = 0, 1, 1
+        x_sample = np.random.normal(mu, sigma, N)
+
         total_iterations = np.ceil(len(args.dataset) / args.teacher_batch_size) * args.teacher_epochs
 
         if (args.dataset == 'cifar10'):
@@ -119,14 +122,14 @@ class ZeroShotKTSolver():
                     self.genarator_model.compile(optimizer=sgd, loss=loss_generator, metrics=['accuracy'])
                     self.genarator_model.fit_generator(train_batches, steps_per_epoch=len_train_batch,
                                                        epochs=args.epochs, callbacks=generator_callbacks,
-                                                       validation_data=test_batches[0])
+                                                       validation_data=x_sample)
 
                 # n_s steps for student per iter until total iterations
                 for stud_step in range(0, n_s):
                     self.student_model.compile(optimizer=sgd, loss=self.KT_loss_student(), metrics=['accuracy'])
                     self.student_model.fit_generator(train_batches, steps_per_epoch=len_train_batch, epochs=args.epochs,
                                                      callbacks=student_callbacks,
-                                                     validation_data=test_batches[0])
+                                                     validation_data=x_sample)
 
 
         else:
