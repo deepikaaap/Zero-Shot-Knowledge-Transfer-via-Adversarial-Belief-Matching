@@ -13,6 +13,8 @@ import keras.losses as Loss
 import keras.backend as K
 from utils.helpers import *
 from utils.cosine_annealing import *
+import tensorflow.keras.backend as TK
+
 
 
 class ZeroShotKTSolver():
@@ -103,7 +105,30 @@ class ZeroShotKTSolver():
                                                  validation_data=x_sample)
 
 
-    def find_student_loss(self):
-        student_loss = Loss.kullback_leibler_divergence() + self.compute_attention()
+    def find_student_loss(self, student_activations_list, teacher_activations_list, beta):
+        student_loss = Loss.kullback_leibler_divergence() + self.compute_attention(student_activations_list, teacher_activations_list, beta)
 
         return (-1 * student_loss)
+
+    def compute_attention(self, student_activations_list, teacher_activations_list, beta):
+
+        if len(student_activations_list) != len(teacher_activations_list):
+            raise Exception('Teacher should have equal num of activations as student!')
+        else:
+            attention_loss = 0.0
+            for i in range(0, len(student_activations_list)):
+
+                # L2 norm for each activation
+                stud_act_tensor = TK.variable(student_activations_list[i])
+                stud_act_norm = tf.keras.backend.l2_normalize(stud_act_tensor, axis=0)
+
+                teach_act_tensor = TK.variable(teacher_activations_list[i])
+                teach_act_norm = tf.keras.backend.l2_normalize(teach_act_tensor, axis=0)
+
+                difference_AT = (stud_act_norm - teach_act_norm).pow(2).mean()
+
+                attention_loss += beta * difference_AT
+
+
+            return attention_loss
+
