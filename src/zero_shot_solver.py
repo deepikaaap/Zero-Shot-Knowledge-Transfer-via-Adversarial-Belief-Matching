@@ -91,7 +91,6 @@ class ZeroShotKTSolver():
             for gen_step in range(0, self.args.generator_steps_per_iter):
                 # TO-DO :  update with train function
                 loss_generator = -1 * Loss.kullback_leibler_divergence()
-                self.genarator_model.compile(optimizer=sgd, loss=loss_generator, metrics=['accuracy'])
                 self.genarator_model.fit_generator(train_batches, steps_per_epoch=len_train_batch,
                                                    epochs=self.args.epochs, callbacks=generator_callbacks,
                                                    validation_data=x_sample)
@@ -99,7 +98,6 @@ class ZeroShotKTSolver():
             # student per iter until total iterations
             for stud_step in range(0, self.args.student_steps_per_iter):
                 # TO-DO : update with train function
-                self.student_model.compile(optimizer=sgd, loss=self.KT_loss_student(), metrics=['accuracy'])
                 self.student_model.fit_generator(train_batches, steps_per_epoch=len_train_batch, epochs=self.args.epochs,
                                                  callbacks=student_callbacks,
                                                  validation_data=x_sample)
