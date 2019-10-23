@@ -47,7 +47,7 @@ def main():
         model = load_model(args.saved_model)
     else:
         model = WideResNet(args.kernel_init, args.gamma_init, args.dropout,0.00001 , args.weight_decay,
-                           args.momentum)
+                           args.momentum, activation = 'softmax')
         model = model.build_wide_resnet(args.input_shape, nb_classes=nb_classes, d=args.model_depth, k=args.model_width)
         sgd = optimizers.SGD(lr=args.learning_rate, decay=args.weight_decay, momentum=args.momentum, nesterov=True)
         model.compile(optimizer=sgd, loss="categorical_crossentropy", metrics=['accuracy'])
