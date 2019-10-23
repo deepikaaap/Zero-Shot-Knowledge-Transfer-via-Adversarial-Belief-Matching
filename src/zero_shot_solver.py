@@ -1,7 +1,3 @@
-import os
-import shutil
-from time import time
-# from models.selector import Selector
 import tensorflow as tf
 import numpy as np
 import keras.optimizers as optim
@@ -12,12 +8,16 @@ from keras import backend as K
 from keras.callbacks import ModelCheckpoint
 from data_loader import *
 from models.wide_resnet import *
+from models.generator import *
 import keras.losses as Loss
 import keras.backend as K
+from utils.helpers import *
 
 
 class CosineAnnealingScheduler(Callback):
-    """Cosine annealing scheduler.
+    """
+    This class 'CosineAnnealingcheduler' has been taken from a previously implemented code.
+    Source code reference - https://github.com/4uiiurz1/keras-cosine-annealing/
     """
 
     def __init__(self, T_max, eta_max, eta_min=0, verbose=0):
@@ -56,6 +56,7 @@ class ZeroShotKTSolver():
                                                                     dataset_path=args.dataset_path)
 
         # Create the required folder structure
+        # TO-DO : Corresponding args to be added in main file
         nb_classes = len(test_batches[0][1][0])
         MODEL_PATH = os.environ.get('MODEL_PATH', args.path_to_save_model)
         mk_dir(args.path_to_save_checkpoint)
@@ -68,18 +69,15 @@ class ZeroShotKTSolver():
         if os.path.exists(args.saved_model):
             model = load_model(args.saved_model)
         else:
-            # Build teacher and student models
+            # Build student and generator model objects
             self.student = WideResNet(args.kernel_init, args.gamma_init, args.dropout, args.student_learning_rate,
                                       args.weight_decay,
                                       args.momentum)
-            self.generator = WideResNet(args.kernel_init, args.gamma_init, args.dropout, args.generator_learning_rate,
-                                        args.weight_decay,
-                                        args.momentum)
-
-            self.genarator_model = self.generator.build_wide_resnet(args.input_shape, nb_classes=nb_classes,
-                                                                    d=args.model_depth, k=args.model_width)
             self.student_model = self.student.build_wide_resnet(args.input_shape, nb_classes=nb_classes,
                                                                 d=args.model_depth, k=args.model_width)
+
+            self.generator = Generator(args)
+            self.generator_model = self.generator.build_generator_model()
 
             # Optimizers and schedulers
             self.optimizer_generator = optim.Adam(args.generator_learning_rate, beta_1=0.9, beta_2=0.999, amsgrad=False)
@@ -88,9 +86,10 @@ class ZeroShotKTSolver():
             self.scheduler_student = CosineAnnealingScheduler(1000, args.student_learning_rate, 0)
 
             # Training
+            # TO-DO : Loss function to be changed!
             self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
                                        metrics=['accuracy'])
-            self.genarator_model.compile(optimizer=self.optimizer_generator, loss="categorical_crossentropy",
+            self.generator_model.compile(optimizer=self.optimizer_generator, loss="categorical_crossentropy",
                                          metrics=['accuracy'])
 
             self.generator_callbacks = [
@@ -100,45 +99,36 @@ class ZeroShotKTSolver():
                 ModelCheckpoint('models/%s/model.hdf5' % args.name, verbose=1, save_best_only=True,
                                 save_weights_only=False), self.scheduler_student]
 
-            self.genarator_model.fit_generator(train_batches, steps_per_epoch=len_train_batch, epochs=args.epochs,
-                                               callbacks=generator_callbacks,
-                                               validation_data=test_batches[0])
+    def run(self):
+        # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
+        total_iterations = np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter)
 
-    def run(self, n_g, n_s, teacher_epochs, args):
-        self.args = args
+        for i in range(total_iterations):
+            # Create a new sample for each iteration
+            gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
+            # Just trying to obtain the forward pass output of the generator model, a generated sample
+            # To check - Does the generator always create random samples and teacher and student train on that?
+            x_sample = x_sample = generator_model(gen_input)
 
-        mu, sigma, N = 0, 1, 1
-        x_sample = np.random.normal(mu, sigma, N)
+            # steps for generator per iter until total iterations
+            for gen_step in range(0, self.args.generator_steps_per_iter):
+                # TO-DO :  update with train function
+                loss_generator = -1 * Loss.kullback_leibler_divergence()
+                self.genarator_model.compile(optimizer=sgd, loss=loss_generator, metrics=['accuracy'])
+                self.genarator_model.fit_generator(train_batches, steps_per_epoch=len_train_batch,
+                                                   epochs=args.epochs, callbacks = generator_callbacks,
+                                                   validation_data=x_sample)
 
-        total_iterations = np.ceil(len(args.dataset) / args.teacher_batch_size) * args.teacher_epochs
-
-        if (args.dataset == 'cifar10'):
-
-            for i in range(0, total_iterations):
-
-                # n_g steps for generator per iter until total iterations
-                for gen_step in range(0, n_g):
-                    loss_generator = -1 * Loss.kullback_leibler_divergence()
-                    self.genarator_model.compile(optimizer=sgd, loss=loss_generator, metrics=['accuracy'])
-                    self.genarator_model.fit_generator(train_batches, steps_per_epoch=len_train_batch,
-                                                       epochs=args.epochs, callbacks=generator_callbacks,
-                                                       validation_data=x_sample)
-
-                # n_s steps for student per iter until total iterations
-                for stud_step in range(0, n_s):
-                    self.student_model.compile(optimizer=sgd, loss=self.KT_loss_student(), metrics=['accuracy'])
-                    self.student_model.fit_generator(train_batches, steps_per_epoch=len_train_batch, epochs=args.epochs,
-                                                     callbacks=student_callbacks,
-                                                     validation_data=x_sample)
-
-
-        else:
-            raise Exception('Train your model using cifar10 dataset.')
+            # student per iter until total iterations
+            for stud_step in range(0, self.args.student_steps_per_iter):
+                # TO-DO : update with train function
+                self.student_model.compile(optimizer=sgd, loss=self.KT_loss_student(), metrics=['accuracy'])
+                self.student_model.fit_generator(train_batches, steps_per_epoch=len_train_batch, epochs=args.epochs,
+                                                 callbacks=student_callbacks,
+                                                 validation_data=x_sample)
+                
 
     def find_student_loss(self):
-
         student_loss = Loss.kullback_leibler_divergence() + self.compute_attention()
 
         return (-1 * student_loss)
-
-#   def compute_attention(self):
