@@ -2,8 +2,11 @@ import math
 from keras.callbacks import Callback
 from keras import backend as K
 
+
 class CosineAnnealingScheduler(Callback):
-    """Cosine annealing scheduler.
+    """
+    This class 'CosineAnnealingScheduler' has been taken from a previously implemented code.
+    Source code reference - https://github.com/4uiiurz1/keras-cosine-annealing/
     """
 
     def __init__(self, T_max, eta_max, eta_min=0, verbose=0):
