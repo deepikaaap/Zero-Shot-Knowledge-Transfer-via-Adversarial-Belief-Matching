@@ -77,7 +77,7 @@ class WideResNet():
 
         return x
 
-    def build_wide_resnet(self, input_dim, nb_classes=100, d=40, k=1):
+    def build_wide_resnet(self, input_dim, nb_classes=100, d=40, k=1, activation = None):
         nChannels = [16, 16, 32, 64]
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
         N = int((d - 4) / 6)
@@ -107,7 +107,7 @@ class WideResNet():
         x = AveragePooling2D((8, 8))(x)
         x = Flatten()(x)
 
-        x = Dense(nb_classes, W_regularizer=l2(self.weight_decay), activation='softmax')(x)
+        x = Dense(nb_classes, W_regularizer=l2(self.weight_decay), activation=activation)(x)
 
         model = Model(ip, x)
 

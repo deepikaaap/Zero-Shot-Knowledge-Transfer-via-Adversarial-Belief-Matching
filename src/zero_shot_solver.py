@@ -42,6 +42,7 @@ def compute_attention(student_activations_list, teacher_activations_list, beta):
 
         return attention_loss
 
+
 class ZeroShotKTSolver():
     def __init__(self, args):
         self.args = args
@@ -141,3 +142,6 @@ class ZeroShotKTSolver():
         self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
         print('Test loss : %0.5f' % (scores[0]))
         print('Test accuracy = %0.5f' % (scores[1]))
+
+
+
