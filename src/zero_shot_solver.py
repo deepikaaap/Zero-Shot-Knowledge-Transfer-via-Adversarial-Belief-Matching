@@ -108,7 +108,7 @@ class ZeroShotKTSolver():
     def find_student_loss(self, student_activations_list, teacher_activations_list, beta):
         student_loss = Loss.kullback_leibler_divergence() + self.compute_attention(student_activations_list, teacher_activations_list, beta)
 
-        return (-1 * student_loss)
+        return student_loss
 
     def compute_attention(self, student_activations_list, teacher_activations_list, beta):
 
