@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import keras.optimizers as optim
 from keras.callbacks import LearningRateScheduler
+from keras.layers import Activation
 import math
 from keras.callbacks import Callback
 from keras import backend as K
@@ -13,7 +14,33 @@ import keras.losses as Loss
 import keras.backend as K
 from utils.helpers import *
 from utils.cosine_annealing import *
+import tensorflow.keras.backend as TK
 
+
+def negative_kullback_leibler_divergence(layer):
+    negative_loss = -1 * Loss.kullback_leibler_divergence(predicted, true)
+
+    return negative_loss
+
+
+def compute_attention(student_activations_list, teacher_activations_list, beta):
+    if len(student_activations_list) != len(teacher_activations_list):
+        raise Exception('Teacher should have equal num of activations as student!')
+    else:
+        attention_loss = 0.0
+        for i in range(0, len(student_activations_list)):
+            # L2 norm for each activation
+            stud_act_tensor = TK.variable(student_activations_list[i])
+            stud_act_norm = tf.keras.backend.l2_normalize(stud_act_tensor, axis=0)
+
+            teach_act_tensor = TK.variable(teacher_activations_list[i])
+            teach_act_norm = tf.keras.backend.l2_normalize(teach_act_tensor, axis=0)
+
+            difference_AT = (stud_act_norm - teach_act_norm).pow(2).mean()
+
+            attention_loss += beta * difference_AT
+
+        return attention_loss
 
 class ZeroShotKTSolver():
     def __init__(self, args):
@@ -39,6 +66,10 @@ class ZeroShotKTSolver():
                                                                              self.args.student_model_width)))
         mk_dir(CHECKPOINT_PATH)
         mk_dir(MODEL_PATH)
+        # Load pre-trained teacher model and set all the layers as non-trainable
+        self.teacher_model = load_model(os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
+        for layer in self.teacher_model.layers:
+            layer.trainable = False
 
         if os.path.exists(self.args.saved_model):
             self.student_model = load_model(os.path.join(MODEL_PATH, self.args.saved_student_model))
@@ -64,9 +95,9 @@ class ZeroShotKTSolver():
 
             # Training
             # TO-DO : Loss function to be changed!
-            self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
+            self.student_model.compile(optimizer=self.optimizer_student, loss="kullback_leibler_divergence",
                                        metrics=['accuracy'])
-            self.generator_model.compile(optimizer=self.optimizer_generator, loss="categorical_crossentropy",
+            self.generator_model.compile(optimizer=self.optimizer_generator, loss=negative_kullback_leibler_divergence(student_model.layers[-1]),
                                          metrics=['accuracy'])
 
             self.generator_callbacks = [
@@ -79,33 +110,34 @@ class ZeroShotKTSolver():
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
         total_iterations = np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter)
-
+        output_layers = ['output1', 'output2']  # Layer corresponding every network block
         for i in range(total_iterations):
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
             # Just trying to obtain the forward pass output of the generator model, a generated sample
             # To check - Does the generator always create random samples and teacher and student train on that?
             x_sample = generator_model(gen_input)
-
+            # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.
+            teacher_output = teacher_model(x_sample)
+            '''
+            # Skipping attention for now
+            teacher_activations = []
+            for layer in self.teacher_model.layers:
+                # TO-DO pick only the network block outputs!
+                if layer.name in output_layers:
+                    teacher_activations.append(layer.output)
+            '''
             # steps for generator per iter until total iterations
             for gen_step in range(0, self.args.generator_steps_per_iter):
                 # TO-DO :  update with train function
-                loss_generator = -1 * Loss.kullback_leibler_divergence()
-                self.genarator_model.compile(optimizer=sgd, loss=loss_generator, metrics=['accuracy'])
-                self.genarator_model.fit_generator(train_batches, steps_per_epoch=len_train_batch,
-                                                   epochs=self.args.epochs, callbacks=generator_callbacks,
-                                                   validation_data=x_sample)
+                self.generator_model.train_on_batch(x_sample, teacher_output)
 
             # student per iter until total iterations
             for stud_step in range(0, self.args.student_steps_per_iter):
                 # TO-DO : update with train function
-                self.student_model.compile(optimizer=sgd, loss=self.KT_loss_student(), metrics=['accuracy'])
-                self.student_model.fit_generator(train_batches, steps_per_epoch=len_train_batch, epochs=self.args.epochs,
-                                                 callbacks=student_callbacks,
-                                                 validation_data=x_sample)
+                self.student_model.train_on_batch(x_sample, teacher_output)
 
 
-    def find_student_loss(self):
-        student_loss = Loss.kullback_leibler_divergence() + self.compute_attention()
-
-        return (-1 * student_loss)
+        self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
+        print('Test loss : %0.5f' % (scores[0]))
+        print('Test accuracy = %0.5f' % (scores[1]))
