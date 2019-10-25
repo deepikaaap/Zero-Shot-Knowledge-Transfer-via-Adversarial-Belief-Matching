@@ -17,7 +17,6 @@ from utils.cosine_annealing import *
 import tensorflow.keras.backend as TK
 import logging
 
-
 def negative_kullback_leibler_divergence(y_true, y_pred):
     negative_loss = -1 * Loss.kullback_leibler_divergence(y_true, y_pred)
 
@@ -53,7 +52,9 @@ def compute_attention(student_activations_list, teacher_activations_list, beta):
 class ZeroShotKTSolver():
     def __init__(self, args):
         self.args = args
-
+        print("&$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+        print(tf.executing_eagerly())
+        print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
         # Load dataset
         if self.args.existing_dataset:
             self.args.dataset_path = os.path.join(self.args.dataset_path, self.args.dataset)
@@ -77,7 +78,7 @@ class ZeroShotKTSolver():
         # Load pre-trained teacher model and set all the layers as non-trainable
         with tf.Session() as sess:
             self.teacher_model = load_model(os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
-            tf.get_default_graph().finalize()
+            #tf.get_default_graph().finalize()
         for layer in self.teacher_model.layers:
             layer.trainable = False
 
@@ -128,8 +129,9 @@ class ZeroShotKTSolver():
         logging.debug("Starting to take iteration steps..")
         # counter for iteration steps:
         for current_iteration in range(total_iterations):
-            self.generator_model.optimizer.lr = self.scheduler_generator.find_current_learning_rate(current_iteration + 1)
-            self.student_model.optimizer.lr = self.self.scheduler_student.find_current_learning_rate(current_iteration + 1)
+            self.generator_model.optimizer = self.optimizer_generator
+            K.set_value(self.generator_model.optimizer.lr, self.scheduler_generator.find_current_learning_rate(current_iteration + 1))
+            K.set_value(self.student_model.optimizer.lr,self.scheduler_student.find_current_learning_rate(current_iteration + 1))
 
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
@@ -137,11 +139,12 @@ class ZeroShotKTSolver():
             # Just trying to obtain the forward pass output of the generator model, a generated sample
             # To check - Does the generator always create random samples and teacher and student train on that?
             x_sample = self.generator_model(gen_input)
-            # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.
+            # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.  
             teacher_output = self.teacher_model(x_sample)
             student_output = self.student_model(x_sample)
-
-            '''
+            '''tfe = tf.contrib.eager
+            tfe.enable_eager_execution(config=tf.ConfigProto(allow_soft_placement=True,
+                                                    log_device_placement=True), device_policy=tfe.DEVICE_PLACEMENT_WARN)
             # Skipping attention for now
             teacher_activations = []
             for layer in self.teacher_model.layers:
