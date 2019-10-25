@@ -72,7 +72,7 @@ class ZeroShotKTSolver():
         for layer in self.teacher_model.layers:
             layer.trainable = False
 
-        if os.path.exists(self.args.saved_model):
+        if os.path.exists(self.args.saved_student_model) and os.path.exists(self.args.saved_generator_model):
             self.student_model = load_model(os.path.join(MODEL_PATH, self.args.saved_student_model))
             self.generator_model = load_model(os.path.join(MODEL_PATH, self.args.saved_generator_model))
         else:
@@ -102,10 +102,12 @@ class ZeroShotKTSolver():
                                          metrics=['accuracy'])
 
             self.generator_callbacks = [
-                ModelCheckpoint('models/%s/model.hdf5' % self.args.name, verbose=1, save_best_only=True,
+                ModelCheckpoint(CHECKPOINT_PATH + 'generator_weights.{epoch:02d}/%s/.h5' % self.args.student_model_depth,
+                                verbose=1, save_best_only=True,
                                 save_weights_only=False), self.scheduler_generator]
             self.student_callbacks = [
-                ModelCheckpoint('models/%s/model.hdf5' % self.args.name, verbose=1, save_best_only=True,
+                ModelCheckpoint(CHECKPOINT_PATH + 'student_weights.{epoch:02d}/%s/.h5' % self.args.student_model_depth,
+                                verbose=1, save_best_only=True,
                                 save_weights_only=False), self.scheduler_student]
 
     def run(self):
@@ -137,7 +139,6 @@ class ZeroShotKTSolver():
             for stud_step in range(0, self.args.student_steps_per_iter):
                 # TO-DO : update with train function
                 self.student_model.train_on_batch(x_sample, teacher_output)
-
 
         self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
         print('Test loss : %0.5f' % (scores[0]))
