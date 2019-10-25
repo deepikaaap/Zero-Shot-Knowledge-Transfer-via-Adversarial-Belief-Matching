@@ -1,4 +1,4 @@
-from keras.models import Model
+from keras.models import Sequential
 from keras.layers.convolutional import Conv2D, Conv2DTranspose
 from keras.layers.core import Dense
 from keras.layers import LeakyReLU, Input, Reshape
@@ -12,25 +12,26 @@ class Generator():
         self.z_dim = args.z_dim
 
     def build_generator_model(self):
-        ip = Input(shape=(self.z_dim,))
-        # model = Sequential()
+#         ip = Input(shape=(self.z_dim,))
+        model = Sequential()
         n_nodes = 256 * 8 * 8
-        x = Dense(n_nodes)(ip)
-        x = LeakyReLU(alpha=0.2)(x)
-        x = Reshape((8, 8, 256))(x)
-        x = BatchNormalization(axis=-1)(x)
+        model.add(Dense(n_nodes, input_dim = self.z_dim))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(Reshape((8, 8, 256)))
+        model.add(BatchNormalization(axis=-1))
         # upsample to 16x16 and convolve
-        x = Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same')(x)
-        x = LeakyReLU(alpha=0.2)(x)
-        x = BatchNormalization(axis=-1)(x)
+        model.add(Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same'))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(BatchNormalization(axis=-1))
         # upsample to 32x32 and convolve
-        x = Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same')(x)
-        x = LeakyReLU(alpha=0.2)(x)
-        x = BatchNormalization(axis=-1)(x)
+        model.add(Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same'))
+        model.add(LeakyReLU(alpha=0.2))
+        model.add(BatchNormalization(axis=-1))
         # output layer
-        x = Conv2D(3, (3, 3), activation='tanh', padding='same')(x)
-        x = BatchNormalization(axis=-1)(x)
-        model = Model(ip, x)
+        # Maybe a ReLU layer in?
+        model.add(Conv2D(3, (3, 3), activation='tanh', padding='same'))
+        model.add(BatchNormalization(axis=-1))
+        # model = Model(ip, x)
 
         return model
 
