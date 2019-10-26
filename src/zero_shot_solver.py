@@ -1,21 +1,23 @@
 import tensorflow as tf
 import numpy as np
 import keras.optimizers as optim
-from keras.callbacks import LearningRateScheduler
-from keras.layers import Activation
+import tensorflow.keras.optimizers as tfoptim
+from tensorflow.keras.callbacks import LearningRateScheduler
+from tensorflow.keras.layers import Activation
 import math
-from keras.callbacks import Callback
-from keras import backend as K
-from keras.callbacks import ModelCheckpoint
+from tensorflow.keras.callbacks import Callback
+from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import ModelCheckpoint
 from data_loader import *
 from models.wide_resnet import *
 from models.generator import *
-import keras.losses as Loss
-import keras.backend as K
+import tensorflow.keras.losses as Loss
+import tensorflow.keras.backend as K
 from utils.helpers import *
 from utils.cosine_annealing import *
 import tensorflow.keras.backend as TK
 import logging
+
 
 def negative_kullback_leibler_divergence(y_true, y_pred):
     negative_loss = -1 * Loss.kullback_leibler_divergence(y_true, y_pred)
@@ -26,6 +28,9 @@ def negative_kullback_leibler_divergence(y_true, y_pred):
 def custom_grad_generator(model, y_true, y_pred):
     with tf.GradientTape() as tape:
         loss_value = negative_kullback_leibler_divergence(y_true, y_pred)
+        print("????????????????????????????????????")
+        print((loss_value))
+        print("**************************************")
         return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
@@ -76,9 +81,10 @@ class ZeroShotKTSolver():
         mk_dir(CHECKPOINT_PATH)
         mk_dir(MODEL_PATH)
         # Load pre-trained teacher model and set all the layers as non-trainable
-        with tf.Session() as sess:
-            self.teacher_model = load_model(os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
-            #tf.get_default_graph().finalize()
+        with tf.compat.v1.Session() as sess:
+            self.teacher_model = load_model(
+                os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
+            # tf.get_default_graph().finalize()
         for layer in self.teacher_model.layers:
             layer.trainable = False
 
@@ -87,7 +93,7 @@ class ZeroShotKTSolver():
             self.generator_model = load_model(os.path.join(MODEL_PATH, self.args.saved_generator_model))
         else:
             # Build student and generator model objects
-            if self.args.student_network_model=='WResNet':
+            if self.args.student_network_model == 'WResNet':
                 self.student = WideResNet('he_normal', 'uniform', 0.0, self.args.student_learning_rate,
                                           0.0005, 0.1)
                 self.student_model = self.student.build_wide_resnet(self.args.input_shape, nb_classes=nb_classes,
@@ -99,8 +105,8 @@ class ZeroShotKTSolver():
             self.generator_model = self.generator.build_generator_model()
 
             # Learning rate schedulers
-            self.optimizer_generator = optim.Adam(self.args.generator_learning_rate, beta_1=0.9, beta_2=0.999,
-                                                  amsgrad=False)
+            self.optimizer_generator = tfoptim.Adam(self.args.generator_learning_rate, beta_1=0.9, beta_2=0.999,
+                                                    amsgrad=False)
             self.optimizer_student = optim.Adam(self.args.student_learning_rate, beta_1=0.9, beta_2=0.999,
                                                 amsgrad=False)
             self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
@@ -130,8 +136,10 @@ class ZeroShotKTSolver():
         # counter for iteration steps:
         for current_iteration in range(total_iterations):
             self.generator_model.optimizer = self.optimizer_generator
-            K.set_value(self.generator_model.optimizer.lr, self.scheduler_generator.find_current_learning_rate(current_iteration + 1))
-            K.set_value(self.student_model.optimizer.lr,self.scheduler_student.find_current_learning_rate(current_iteration + 1))
+            K.set_value(self.generator_model.optimizer.lr,
+                        self.scheduler_generator.find_current_learning_rate(current_iteration + 1))
+            K.set_value(self.student_model.optimizer.lr,
+                        self.scheduler_student.find_current_learning_rate(current_iteration + 1))
 
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
@@ -139,7 +147,7 @@ class ZeroShotKTSolver():
             # Just trying to obtain the forward pass output of the generator model, a generated sample
             # To check - Does the generator always create random samples and teacher and student train on that?
             x_sample = self.generator_model(gen_input)
-            # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.  
+            # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.
             teacher_output = self.teacher_model(x_sample)
             student_output = self.student_model(x_sample)
             '''tfe = tf.contrib.eager
@@ -157,18 +165,17 @@ class ZeroShotKTSolver():
             #     # TO-DO :  update with train function
             #     self.generator_model.train_on_batch(x_sample, teacher_output)
 
-
             # student per iter until total iterations
             for stud_step in range(0, self.args.student_steps_per_iter):
                 # TO-DO : update with train function
                 if stud_step < self.args.generator_steps_per_iter:
-                    loss_value, grads = custom_grad_generator(self.generator_model, student_output, teacher_output)
-                    print("Step: {}, Initial Loss: {}".format(self.optimizer_generator.iterations.numpy(),
-                                                              loss_value.numpy()))
-                    optimizer_generator.apply_gradients(zip(grads, model.trainable_variables))
+                    # loss_value, grads = custom_grad_generator(self.generator_model, student_output, teacher_output)
+                    # print("Step: {}, Initial Loss: {}".format(self.optimizer_generator.iterations.numpy(),
+                    #                                          loss_value.numpy()))
+                    print(self.generator_model.trainable_variables)
+                    # self.optimizer_generator.apply_gradients(zip(grads, self.generator_model.trainable_variables))
 
                 self.student_model.train_on_batch(x_sample, teacher_output)
-
 
         self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
         print('Test loss : %0.5f' % (scores[0]))

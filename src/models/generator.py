@@ -1,8 +1,9 @@
-from keras.models import Sequential
-from keras.layers.convolutional import Conv2D, Conv2DTranspose
-from keras.layers.core import Dense
-from keras.layers import LeakyReLU, Input, Reshape
-from keras.layers.normalization import BatchNormalization
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, Conv2DTranspose
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import LeakyReLU, Input, Reshape
+from tensorflow.keras.layers import BatchNormalization
 import tensorflow.keras.backend as K
 
 
