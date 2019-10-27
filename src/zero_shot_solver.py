@@ -4,8 +4,6 @@ import numpy as np
 import keras.optimizers as optim
 import tensorflow.keras.optimizers as tfoptim
 from tensorflow.keras.callbacks import LearningRateScheduler
-from tensorflow.keras.layers import Activation
-import math
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -19,28 +17,8 @@ from utils.cosine_annealing import *
 import tensorflow.keras.backend as TK
 import logging
 
-
-# tf.compat.v1.disable_eager_execution()
-
-def negative_kullback_leibler_divergence(y_true, y_pred):
-    y_true = v1.reshape(y_true, (1, -1))
-    y_pred = v1.reshape(y_pred, (1, -1))
-    negative_loss = Loss.KLD(y_true, y_pred)
-    # print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
-    # tf.print(negative_loss)
-    return negative_loss
-
-
-def custom_grad_generator(model, y_true, y_pred):
-    with tf.GradientTape() as tape:
-        loss_value = negative_kullback_leibler_divergence(y_true, y_pred)
-        print("????????????????????????????????????")
-        print(y_true)
-        print(y_pred)
-        print(tf.math.equal(y_true, y_pred))
-        print((loss_value))
-        print("**************************************")
-        return loss_value, tape.gradient(loss_value, model.trainable_variables)
+# Setting eager execution false - to access graph mode
+tf.compat.v1.disable_eager_execution()
 
 
 def compute_attention(student_activations_list, teacher_activations_list, beta):
@@ -67,20 +45,20 @@ class ZeroShotKTSolver():
     def __init__(self, args):
         self.args = args
         print("&$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-        print(tf.executing_eagerly())
+        print("Executing in eager mode? ", tf.executing_eagerly())
         print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
         # Load dataset
         if self.args.existing_dataset:
             self.args.dataset_path = os.path.join(self.args.dataset_path, self.args.dataset)
 
-        _, test_batches, _ = load_dataset(self.args.batch_size, False,
-                                          self.args.existing_dataset,
-                                          dataset=self.args.dataset,
-                                          dataset_path=self.args.dataset_path)
+        _, self.test_batches, _ = load_dataset(self.args.batch_size, False,
+                                               self.args.existing_dataset,
+                                               dataset=self.args.dataset,
+                                               dataset_path=self.args.dataset_path)
 
         # Create the required folder structure
         # TO-DO : Corresponding args to be added in main file
-        nb_classes = len(test_batches[0][1][0])
+        nb_classes = len(self.test_batches[0][1][0])
         MODEL_PATH = os.environ.get('MODEL_PATH', self.args.trained_model_path)
         mk_dir(self.args.path_to_save_checkpoint)
         CHECKPOINT_PATH = os.environ.get('CHECKPOINT_PATH', os.path.join(self.args.path_to_save_checkpoint,
@@ -121,17 +99,9 @@ class ZeroShotKTSolver():
             self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
             self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
-            # Training
-            # TO-DO : Loss function to be changed!
+            # Compiling student model
             self.student_model.compile(optimizer=self.optimizer_student, loss="kullback_leibler_divergence",
                                        metrics=['accuracy'])
-            # self.generator_model.compile(optimizer=self.optimizer_generator,
-            #                              loss=negative_kullback_leibler_divergence(student_model.layers[-1]),
-            #                              metrics=['accuracy'])
-            # self.generator_callbacks = [
-            #     ModelCheckpoint(CHECKPOINT_PATH + 'generator_weights.{epoch:02d}/%s/.h5' % self.args.student_model_depth,
-            #                     verbose=1, save_best_only=True,
-            #                     save_weights_only=False), self.scheduler_generator]
             self.student_callbacks = [
                 ModelCheckpoint(CHECKPOINT_PATH + 'student_weights.{epoch:02d}/%s/.h5' % self.args.student_model_depth,
                                 verbose=1, save_best_only=True,
@@ -140,7 +110,6 @@ class ZeroShotKTSolver():
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
         total_iterations = int(np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter))
-        output_layers = ['output1', 'output2']  # Layer corresponding every network block
         logging.debug("Starting to take iteration steps..")
         # counter for iteration steps:
         for current_iteration in range(total_iterations):
@@ -153,50 +122,25 @@ class ZeroShotKTSolver():
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
             logging.debug("In iteration:", current_iteration)
-            # Just trying to obtain the forward pass output of the generator model, a generated sample
-            # To check - Does the generator always create random samples and teacher and student train on that?
 
-            with tf.GradientTape() as tape:
-                # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.
+            for stud_step in range(0, self.args.student_steps_per_iter):
+                # self.generator_model(gen_input) - Gets the forward pass output of the generator model
+                if stud_step < self.args.generator_steps_per_iter:
+                    grads = tf.gradients(
+                        -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
+                                      tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
+                        self.generator_model.trainable_variables)
+                    grads, _ = tf.clip_by_global_norm(grads, 5)
+                    init = tf.compat.v1.global_variables_initializer()
 
-                teacher_output = self.teacher_model(self.generator_model(gen_input))
-                student_output = self.student_model(self.generator_model(gen_input))
-                '''tfe = tf.contrib.eager
-                tfe.enable_eager_execution(config=tf.ConfigProto(allow_soft_placement=True,
-                                                    log_device_placement=True), device_policy=tfe.DEVICE_PLACEMENT_WARN)
-                # Skipping attention for now
-                teacher_activations = []
-                for layer in self.teacher_model.layers:
-                    # TO-DO pick only the network block outputs!
-                    if layer.name in output_layers:
-                        teacher_activations.append(layer.output)
-                '''
-                # steps for generator per iter until total iterations
-                # for gen_step in range(0, self.args.generator_steps_per_iter):
-                #     # TO-DO :  update with train function
-                #     self.generator_model.train_on_batch(x_sample, teacher_output)
-
-                # student per iter until total iterations
-                for stud_step in range(0, self.args.student_steps_per_iter):
-                    # TO-DO : update with train function
-                    if stud_step < self.args.generator_steps_per_iter:
-                        grads = tape.gradient(
-                            -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                                          tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
-                            self.generator_model.trainable_weights)
-                        # print("Step: {}, Initial Loss: {}".format(self.optimizer_generator.iterations.numpy(),
-                        #                                          loss_value.numpy()))
-                        print(self.generator_model.trainable_variables)
-                        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-                        print(grads)
-                        self.optimizer_generator.apply_gradients(zip(grads, self.generator_model.trainable_variables))
-
-                    # self.student_model.train_on_batch(x_sample, teacher_output)
-                    # loss_value, grads = custom_grad_generator(self.student_model, student_output, teacher_output)
-                    # print(self.student_model.trainable_variables)
-                    # print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
-                    # print(grads)
-                    # self.optimizer_student.apply_gradients(())
-            self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
+                    with tf.compat.v1.Session() as sess:
+                        sess.run(init)
+                        grad_value = sess.run(grads)
+                        print(grad_value)
+                        grads_and_vars = list(zip(grads, self.generator_model.trainable_variables))
+                        self.optimizer_generator.apply_gradients(grads_and_vars)
+                    # TO-DO : student model training
+            scores = self.student_model.evaluate(self.test_batches[0][0], self.test_batches[0][1],
+                                                 len(self.test_batches[0][0]))
             print('Test loss : %0.5f' % (scores[0]))
             print('Test accuracy = %0.5f' % (scores[1]))
