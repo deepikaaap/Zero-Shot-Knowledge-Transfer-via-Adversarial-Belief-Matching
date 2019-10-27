@@ -114,7 +114,7 @@ class WideResNet():
         return model
 
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     wresnet = WideResNet('he_normal', 'uniform', 0.0, 1e-5, 0.0005, 0.1)
     # input image shape
     init = (32, 32, 3)
