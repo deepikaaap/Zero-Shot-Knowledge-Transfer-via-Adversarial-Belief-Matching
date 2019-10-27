@@ -71,7 +71,7 @@ class ZeroShotKTSolver():
         with tf.compat.v1.Session() as sess:
             self.teacher_model = load_model(
                 os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
-            # tf.get_default_graph().finalize()
+
         for layer in self.teacher_model.layers:
             layer.trainable = False
 
@@ -94,8 +94,8 @@ class ZeroShotKTSolver():
             # Learning rate schedulers
             self.optimizer_generator = tfoptim.Adam(self.args.generator_learning_rate, beta_1=0.9, beta_2=0.999,
                                                     amsgrad=False)
-            self.optimizer_student = optim.Adam(self.args.student_learning_rate, beta_1=0.9, beta_2=0.999,
-                                                amsgrad=False)
+            self.optimizer_student = tfoptim.Adam(self.args.student_learning_rate, beta_1=0.9, beta_2=0.999,
+                                                  amsgrad=False)
             self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
             self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
@@ -124,22 +124,32 @@ class ZeroShotKTSolver():
             logging.debug("In iteration:", current_iteration)
 
             for stud_step in range(0, self.args.student_steps_per_iter):
+
                 # self.generator_model(gen_input) - Gets the forward pass output of the generator model
+                student_grads = tf.gradients(
+                    Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
+                             tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
+                    self.student_model.trainable_variables)
+                student_grads, _ = tf.clip_by_global_norm(student_grads, 5)
+
                 if stud_step < self.args.generator_steps_per_iter:
                     grads = tf.gradients(
                         -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
                                       tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
                         self.generator_model.trainable_variables)
                     grads, _ = tf.clip_by_global_norm(grads, 5)
-                    init = tf.compat.v1.global_variables_initializer()
 
-                    with tf.compat.v1.Session() as sess:
-                        sess.run(init)
-                        grad_value = sess.run(grads)
-                        print(grad_value)
+                init = tf.compat.v1.global_variables_initializer()
+
+                with tf.compat.v1.Session() as sess:
+                    sess.run(init)
+                    if stud_step < self.args.generator_steps_per_iter:
+                        sess.run(grads)
                         grads_and_vars = list(zip(grads, self.generator_model.trainable_variables))
                         self.optimizer_generator.apply_gradients(grads_and_vars)
-                    # TO-DO : student model training
+                    sess.run(student_grads)
+                    student_grads_and_vars = list(zip(student_grads, self.student_model.trainable_variables))
+                    self.optimizer_student.apply_gradients(student_grads_and_vars)
             scores = self.student_model.evaluate(self.test_batches[0][0], self.test_batches[0][1],
                                                  len(self.test_batches[0][0]))
             print('Test loss : %0.5f' % (scores[0]))
