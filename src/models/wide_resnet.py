@@ -1,10 +1,10 @@
-import keras
-from keras.models import Model, load_model
-from keras.layers import Input, Add, Activation, Dropout, Flatten, Dense
-from keras.layers.convolutional import Convolution2D, MaxPooling2D, AveragePooling2D
-from keras.layers.normalization import BatchNormalization
-from keras.regularizers import l2
-from keras import backend as K
+import tensorflow.keras
+from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.layers import Input, Add, Activation, Dropout, Flatten, Dense
+from tensorflow.keras.layers import Conv2D, MaxPool2D, AveragePooling2D
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras import backend as K
 
 
 class WideResNet():
@@ -19,8 +19,8 @@ class WideResNet():
         self.momentum = momentum
 
     def expand_conv(self, init, base, k, strides=(1, 1)):
-        x = Convolution2D(base * k, (3, 3), padding='same', strides=strides, kernel_initializer=self.kernel_initializer,
-                          W_regularizer=l2(self.weight_decay),
+        x = Conv2D(base * k, (3, 3), padding='same', strides=strides, kernel_initializer=self.kernel_initializer,
+                          kernel_regularizer=l2(self.weight_decay),
                           use_bias=False)(init)
 
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
@@ -29,13 +29,13 @@ class WideResNet():
                                gamma_initializer=self.gamma_initializer)(x)
         x = Activation('relu')(x)
 
-        x = Convolution2D(base * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
-                          W_regularizer=l2(self.weight_decay),
+        x = Conv2D(base * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
+                          kernel_regularizer=l2(self.weight_decay),
                           use_bias=False)(x)
 
-        skip = Convolution2D(base * k, (1, 1), padding='same', strides=strides,
+        skip = Conv2D(base * k, (1, 1), padding='same', strides=strides,
                              kernel_initializer=self.kernel_initializer,
-                             W_regularizer=l2(self.weight_decay),
+                             kernel_regularizer=l2(self.weight_decay),
                              use_bias=False)(init)
 
         m = Add()([x, skip])
@@ -45,13 +45,13 @@ class WideResNet():
     def basic_block(self, input, channels, k=1):
         init = input
 
-        channel_axis = 1 if K.common.image_dim_ordering() == "th" else -1
+        channel_axis = -1
 
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
                                gamma_initializer=self.gamma_initializer)(input)
         x = Activation('relu')(x)
-        x = Convolution2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
-                          W_regularizer=l2(self.weight_decay),
+        x = Conv2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
+                          kernel_regularizer=l2(self.weight_decay),
                           use_bias=False)(x)
 
         if self.dropout > 0.0: x = Dropout(self.dropout)(x)
@@ -59,8 +59,8 @@ class WideResNet():
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
                                gamma_initializer=self.gamma_initializer)(x)
         x = Activation('relu')(x)
-        x = Convolution2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
-                          W_regularizer=l2(self.weight_decay),
+        x = Conv2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
+                          kernel_regularizer=l2(self.weight_decay),
                           use_bias=False)(x)
 
         m = Add()([init, x])
@@ -84,8 +84,8 @@ class WideResNet():
         ip = Input(shape=input_dim)
 
         # Create initial convolution block
-        x = Convolution2D(16, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
-                          W_regularizer=l2(self.weight_decay),
+        x = Conv2D(16, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
+                          kernel_regularizer=l2(self.weight_decay),
                           use_bias=False)(ip)
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
@@ -107,14 +107,14 @@ class WideResNet():
         x = AveragePooling2D((8, 8))(x)
         x = Flatten()(x)
 
-        x = Dense(nb_classes, W_regularizer=l2(self.weight_decay), activation='softmax')(x)
+        x = Dense(nb_classes, kernel_regularizer=l2(self.weight_decay), activation='softmax')(x)
 
         model = Model(ip, x)
 
         return model
 
 
-if __name__ == "__main__":
+if __name__ == "_main_":
     wresnet = WideResNet('he_normal', 'uniform', 0.0, 1e-5, 0.0005, 0.1)
     # input image shape
     init = (32, 32, 3)
