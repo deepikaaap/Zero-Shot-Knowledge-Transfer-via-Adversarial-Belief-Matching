@@ -8,7 +8,8 @@ import argparse
 from utils.helpers import *
 from models.wide_resnet import *
 from data_loader import *
-
+import tensorflow
+print(tensorflow.executing_eagerly())
 # Prevent reaching to maximum recursion depth in `theano.tensor.grad`
 sys.setrecursionlimit(2 ** 20)
 logging.basicConfig(level=logging.DEBUG)
@@ -47,7 +48,7 @@ def main():
         model = load_model(args.saved_model)
     else:
         model = WideResNet(args.kernel_init, args.gamma_init, args.dropout,0.00001 , args.weight_decay,
-                           args.momentum, activation = 'softmax')
+                           args.momentum)
         model = model.build_wide_resnet(args.input_shape, nb_classes=nb_classes, d=args.model_depth, k=args.model_width)
         sgd = optimizers.SGD(lr=args.learning_rate, decay=args.weight_decay, momentum=args.momentum, nesterov=True)
         model.compile(optimizer=sgd, loss="categorical_crossentropy", metrics=['accuracy'])

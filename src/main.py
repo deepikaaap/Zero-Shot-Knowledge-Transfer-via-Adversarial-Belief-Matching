@@ -16,7 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_path', default=None, help='downloaded path of dataset to be used if ')
     parser.add_argument('--dataset', default='cifar10', help='any inbuilt that is to be dataset to be used')
     parser.add_argument('--student_network_model', default='WResNet', help='the model architecture to be used')
-    parser.add_argument('--batch_size', default=128, help='size of the batch of images for training')
+    parser.add_argument('--batch_size', default=64, help='size of the batch of images for training')
     parser.add_argument('--z_dim', default=100)
     parser.add_argument('--student_learning_rate', default=2e-3)  # According to the paper
     parser.add_argument('--generator_learning_rate', default=2e-3)  # According to the paper

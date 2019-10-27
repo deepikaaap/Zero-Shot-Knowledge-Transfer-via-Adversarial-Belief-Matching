@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.compat.v1 as v1
 import numpy as np
 import keras.optimizers as optim
 import tensorflow.keras.optimizers as tfoptim
@@ -19,9 +20,14 @@ import tensorflow.keras.backend as TK
 import logging
 
 
-def negative_kullback_leibler_divergence(y_true, y_pred):
-    negative_loss = -1 * Loss.kullback_leibler_divergence(y_true, y_pred)
+# tf.compat.v1.disable_eager_execution()
 
+def negative_kullback_leibler_divergence(y_true, y_pred):
+    y_true = v1.reshape(y_true, (1, -1))
+    y_pred = v1.reshape(y_pred, (1, -1))
+    negative_loss = Loss.KLD(y_true, y_pred)
+    # print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+    # tf.print(negative_loss)
     return negative_loss
 
 
@@ -29,6 +35,9 @@ def custom_grad_generator(model, y_true, y_pred):
     with tf.GradientTape() as tape:
         loss_value = negative_kullback_leibler_divergence(y_true, y_pred)
         print("????????????????????????????????????")
+        print(y_true)
+        print(y_pred)
+        print(tf.math.equal(y_true, y_pred))
         print((loss_value))
         print("**************************************")
         return loss_value, tape.gradient(loss_value, model.trainable_variables)
@@ -146,37 +155,48 @@ class ZeroShotKTSolver():
             logging.debug("In iteration:", current_iteration)
             # Just trying to obtain the forward pass output of the generator model, a generated sample
             # To check - Does the generator always create random samples and teacher and student train on that?
-            x_sample = self.generator_model(gen_input)
-            # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.
-            teacher_output = self.teacher_model(x_sample)
-            student_output = self.student_model(x_sample)
-            '''tfe = tf.contrib.eager
-            tfe.enable_eager_execution(config=tf.ConfigProto(allow_soft_placement=True,
+
+            with tf.GradientTape() as tape:
+                # The label for the sampled input is the output from the pre-trained teacher model, that we try imitating.
+
+                teacher_output = self.teacher_model(self.generator_model(gen_input))
+                student_output = self.student_model(self.generator_model(gen_input))
+                '''tfe = tf.contrib.eager
+                tfe.enable_eager_execution(config=tf.ConfigProto(allow_soft_placement=True,
                                                     log_device_placement=True), device_policy=tfe.DEVICE_PLACEMENT_WARN)
-            # Skipping attention for now
-            teacher_activations = []
-            for layer in self.teacher_model.layers:
-                # TO-DO pick only the network block outputs!
-                if layer.name in output_layers:
-                    teacher_activations.append(layer.output)
-            '''
-            # steps for generator per iter until total iterations
-            # for gen_step in range(0, self.args.generator_steps_per_iter):
-            #     # TO-DO :  update with train function
-            #     self.generator_model.train_on_batch(x_sample, teacher_output)
+                # Skipping attention for now
+                teacher_activations = []
+                for layer in self.teacher_model.layers:
+                    # TO-DO pick only the network block outputs!
+                    if layer.name in output_layers:
+                        teacher_activations.append(layer.output)
+                '''
+                # steps for generator per iter until total iterations
+                # for gen_step in range(0, self.args.generator_steps_per_iter):
+                #     # TO-DO :  update with train function
+                #     self.generator_model.train_on_batch(x_sample, teacher_output)
 
-            # student per iter until total iterations
-            for stud_step in range(0, self.args.student_steps_per_iter):
-                # TO-DO : update with train function
-                if stud_step < self.args.generator_steps_per_iter:
-                    # loss_value, grads = custom_grad_generator(self.generator_model, student_output, teacher_output)
-                    # print("Step: {}, Initial Loss: {}".format(self.optimizer_generator.iterations.numpy(),
-                    #                                          loss_value.numpy()))
-                    print(self.generator_model.trainable_variables)
-                    # self.optimizer_generator.apply_gradients(zip(grads, self.generator_model.trainable_variables))
+                # student per iter until total iterations
+                for stud_step in range(0, self.args.student_steps_per_iter):
+                    # TO-DO : update with train function
+                    if stud_step < self.args.generator_steps_per_iter:
+                        grads = tape.gradient(
+                            -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
+                                          tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
+                            self.generator_model.trainable_weights)
+                        # print("Step: {}, Initial Loss: {}".format(self.optimizer_generator.iterations.numpy(),
+                        #                                          loss_value.numpy()))
+                        print(self.generator_model.trainable_variables)
+                        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                        print(grads)
+                        self.optimizer_generator.apply_gradients(zip(grads, self.generator_model.trainable_variables))
 
-                self.student_model.train_on_batch(x_sample, teacher_output)
-
-        self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
-        print('Test loss : %0.5f' % (scores[0]))
-        print('Test accuracy = %0.5f' % (scores[1]))
+                    # self.student_model.train_on_batch(x_sample, teacher_output)
+                    # loss_value, grads = custom_grad_generator(self.student_model, student_output, teacher_output)
+                    # print(self.student_model.trainable_variables)
+                    # print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+                    # print(grads)
+                    # self.optimizer_student.apply_gradients(())
+            self.student_model.evaluate(test_batches[0][0], test_batches[0][1], len(test_batches[0][0]))
+            print('Test loss : %0.5f' % (scores[0]))
+            print('Test accuracy = %0.5f' % (scores[1]))
