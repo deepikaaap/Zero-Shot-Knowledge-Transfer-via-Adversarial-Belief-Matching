@@ -118,10 +118,8 @@ class ZeroShotKTSolver():
             self.generator_model.optimizer = self.optimizer_generator
             self.student_model.optimizer = self.optimizer_student
 
-            K.set_value(self.generator_model.optimizer.lr,
-                        self.scheduler_generator.find_current_learning_rate(current_iteration + 1))
-            K.set_value(self.student_model.optimizer.lr,
-                        self.scheduler_student.find_current_learning_rate(current_iteration + 1))
+            self.generator_model.optimizer._lr = self.scheduler_generator.find_current_learning_rate(current_iteration)
+            self.student_model.optimizer._lr = self.scheduler_student.find_current_learning_rate(current_iteration)
 
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
