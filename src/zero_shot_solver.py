@@ -16,6 +16,7 @@ from utils.helpers import *
 from utils.cosine_annealing import *
 import tensorflow.keras.backend as TK
 import logging
+from sklearn.metrics import confusion_matrix
 
 # Setting eager execution false - to access graph mode
 tf.compat.v1.disable_eager_execution()
@@ -68,28 +69,28 @@ class ZeroShotKTSolver():
         mk_dir(CHECKPOINT_PATH)
         mk_dir(MODEL_PATH)
         # Load pre-trained teacher model and set all the layers as non-trainable
+        self.teacher_model = load_model(
+            os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
         with tf.compat.v1.Session() as sess:
-            self.teacher_model = load_model(
-                os.path.join(self.args.pretrained_model_path, self.args.pretrained_teacher_model))
-
-        for layer in self.teacher_model.layers:
-            layer.trainable = False
-
-        if os.path.exists(self.args.saved_student_model) and os.path.exists(self.args.saved_generator_model):
-            self.student_model = load_model(os.path.join(MODEL_PATH, self.args.saved_student_model))
-            self.generator_model = load_model(os.path.join(MODEL_PATH, self.args.saved_generator_model))
-        else:
-            # Build student and generator model objects
-            if self.args.student_network_model == 'WResNet':
-                self.student = WideResNet('he_normal', 'uniform', 0.0, self.args.student_learning_rate,
-                                          0.0005, 0.1)
-                self.student_model = self.student.build_wide_resnet(self.args.input_shape, nb_classes=nb_classes,
-                                                                    d=self.args.student_model_depth,
-                                                                    k=self.args.student_model_width)
-            else:
-                print("Not yet implemented")
-            self.generator = Generator(self.args)
-            self.generator_model = self.generator.build_generator_model()
+            for layer in self.teacher_model.layers:
+                layer.trainable = False
+            with tf.compat.v1.variable_scope("student_generator_model"):
+                if os.path.exists(self.args.saved_student_model) and os.path.exists(self.args.saved_generator_model):
+                    self.student_model = load_model(os.path.join(MODEL_PATH, self.args.saved_student_model))
+                    self.generator_model = load_model(os.path.join(MODEL_PATH, self.args.saved_generator_model))
+                else:
+                    # Build student and generator model objects
+                    if self.args.student_network_model == 'WResNet':
+                        self.student = WideResNet('he_normal', 'uniform', 0.0, self.args.student_learning_rate,
+                                                  0.0005, 0.1)
+                        self.student_model = self.student.build_wide_resnet(self.args.input_shape,
+                                                                            nb_classes=nb_classes,
+                                                                            d=self.args.student_model_depth,
+                                                                            k=self.args.student_model_width)
+                    else:
+                        print("Not yet implemented")
+                    self.generator = Generator(self.args)
+                    self.generator_model = self.generator.build_generator_model()
 
             # Learning rate schedulers
             self.optimizer_generator = tfoptim.Adam(self.args.generator_learning_rate, beta_1=0.9, beta_2=0.999,
@@ -101,11 +102,12 @@ class ZeroShotKTSolver():
 
             # Compiling student model
             self.student_model.compile(optimizer=self.optimizer_student, loss="kullback_leibler_divergence",
-                                       metrics=['accuracy'])
-            self.student_callbacks = [
-                ModelCheckpoint(CHECKPOINT_PATH + 'student_weights.{epoch:02d}/%s/.h5' % self.args.student_model_depth,
-                                verbose=1, save_best_only=True,
-                                save_weights_only=False), self.scheduler_student]
+                                      metrics=['accuracy'])
+        student_generator_variables_list = tf.compat.v1.get_collection(
+            tf.compat.v1.GraphKeys.GLOBAL_VARIABLES,
+            scope="student_generator_model"
+        )
+        self.init1 = tf.compat.v1.variables_initializer(student_generator_variables_list)
 
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
@@ -114,6 +116,8 @@ class ZeroShotKTSolver():
         # counter for iteration steps:
         for current_iteration in range(total_iterations):
             self.generator_model.optimizer = self.optimizer_generator
+            self.student_model.optimizer = self.optimizer_student
+
             K.set_value(self.generator_model.optimizer.lr,
                         self.scheduler_generator.find_current_learning_rate(current_iteration + 1))
             K.set_value(self.student_model.optimizer.lr,
@@ -128,21 +132,34 @@ class ZeroShotKTSolver():
                 # self.generator_model(gen_input) - Gets the forward pass output of the generator model
                 student_grads = tf.gradients(
                     Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                             tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
+                             tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
+                                                                   batch_size=self.args.batch_size, steps=1), (1, -1))),
                     self.student_model.trainable_variables)
                 student_grads, _ = tf.clip_by_global_norm(student_grads, 5)
 
                 if stud_step < self.args.generator_steps_per_iter:
                     grads = tf.gradients(
                         -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                                      tf.reshape(self.teacher_model(self.generator_model(gen_input)), (1, -1))),
+                                      tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
+                                                                            batch_size=self.args.batch_size, steps=1),
+                                                 (1, -1))),
                         self.generator_model.trainable_variables)
                     grads, _ = tf.clip_by_global_norm(grads, 5)
 
-                init = tf.compat.v1.global_variables_initializer()
-
+                '''
+                Try this to make sure that the teacher model is loaded properly!!!
+                
+                y_prede=tf.argmax(self.teacher_model.predict(self.test_batches[0][0], batch_size=10000, steps=1),axis=1)
+                y_true= tf.argmax(self.test_batches[0][1],axis=1)
+                cm=tf.size(tf.equal(tf.argmax(y_true,axis=1), tf.argmax(y_prede,axis=1)))
+                print(cm.eval(session=tf.compat.v1.Session()))
+                print(y_prede[:100].eval(session=tf.compat.v1.Session()))
+                print("################################################")
+                print(y_true[:100].eval(session=tf.compat.v1.Session()))
+                '''
                 with tf.compat.v1.Session() as sess:
-                    sess.run(init)
+                    sess.run(self.init1)
+
                     if stud_step < self.args.generator_steps_per_iter:
                         sess.run(grads)
                         grads_and_vars = list(zip(grads, self.generator_model.trainable_variables))
@@ -154,3 +171,4 @@ class ZeroShotKTSolver():
                                                  len(self.test_batches[0][0]))
             print('Test loss : %0.5f' % (scores[0]))
             print('Test accuracy = %0.5f' % (scores[1]))
+
