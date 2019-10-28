@@ -93,10 +93,10 @@ class ZeroShotKTSolver():
                     self.generator_model = self.generator.build_generator_model()
 
             # Learning rate schedulers
-            self.optimizer_generator = tfoptim.Adam(self.args.generator_learning_rate, beta_1=0.9, beta_2=0.999,
-                                                    amsgrad=False)
-            self.optimizer_student = tfoptim.Adam(self.args.student_learning_rate, beta_1=0.9, beta_2=0.999,
-                                                  amsgrad=False)
+            self.optimizer_generator = tf.compat.v1.train.AdamOptimizer(learning_rate=self.args.generator_learning_rate)
+            self.optimizer_student = tf.compat.v1.train.AdamOptimizer(learning_rate=self.args.student_learning_rate)
+            self.generator_global_step = tf.compat.v1.train.get_or_create_global_step()
+            self.student_global_step = tf.compat.v1.train.get_or_create_global_step()
             self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
             self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
@@ -163,10 +163,10 @@ class ZeroShotKTSolver():
                     if stud_step < self.args.generator_steps_per_iter:
                         sess.run(grads)
                         grads_and_vars = list(zip(grads, self.generator_model.trainable_variables))
-                        self.optimizer_generator.apply_gradients(grads_and_vars)
+                        self.optimizer_generator.apply_gradients(grads_and_vars, self.generator_global_step)
                     sess.run(student_grads)
                     student_grads_and_vars = list(zip(student_grads, self.student_model.trainable_variables))
-                    self.optimizer_student.apply_gradients(student_grads_and_vars)
+                    self.optimizer_student.apply_gradients(student_grads_and_vars, self.student_global_step)
             scores = self.student_model.evaluate(self.test_batches[0][0], self.test_batches[0][1],
                                                  len(self.test_batches[0][0]))
             print('Test loss : %0.5f' % (scores[0]))
