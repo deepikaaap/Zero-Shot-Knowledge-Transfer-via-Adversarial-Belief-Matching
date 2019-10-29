@@ -117,35 +117,30 @@ class ZeroShotKTSolver():
             logging.debug("In iteration:", current_iteration)
 
             for stud_step in range(0, self.args.student_steps_per_iter):
-                with tf.GradientTape() as tape:
+                with tf.GradientTape() as gen_tape, tf.GradientTape() as stud_tape:
                     # self.generator_model(gen_input) - Gets the forward pass output of the generator model
-                    stud_loss = Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                                        tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
-                                                                       batch_size=self.args.batch_size, steps=1), (1, -1)))
-
-
-
                     if stud_step < self.args.generator_steps_per_iter:
                         gen_loss = -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
                                           tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
                                                                                 batch_size=self.args.batch_size, steps=1),
                                                      (1, -1)))
+                        grads = gen_tape.gradient(gen_loss, self.generator_model.trainable_variables)
+                        grads, _ = tf.clip_by_global_norm(grads, 5)
 
+                    stud_loss = Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
+                                         tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
+                                                    batch_size=self.args.batch_size, steps=1), (1, -1)))
 
-                grads = tape.gradient(gen_loss, self.generator_model.trainable_variables)
-                student_grads = tape.gradient(stud_loss, self.student_model.trainable_variables)
-                grads, _ = tf.clip_by_global_norm(grads, 5)
+                student_grads = stud_tape.gradient(stud_loss, self.student_model.trainable_variables)
                 student_grads, _ = tf.clip_by_global_norm(student_grads, 5)
-                '''
-                Try this to make sure that the teacher model is loaded properly!!!
-                
+
+                #Try this to make sure that the teacher model is loaded properly!!!
+                ''' 
                 y_prede=tf.argmax(self.teacher_model.predict(self.test_batches[0][0], batch_size=10000, steps=1),axis=1)
                 y_true= tf.argmax(self.test_batches[0][1],axis=1)
-                cm=tf.size(tf.equal(tf.argmax(y_true,axis=1), tf.argmax(y_prede,axis=1)))
-                print(cm.eval(session=tf.compat.v1.Session()))
-                print(y_prede[:100].eval(session=tf.compat.v1.Session()))
-                print("################################################")
-                print(y_true[:100].eval(session=tf.compat.v1.Session()))
+                #print(y_prede[:100].numpy())
+                #print("################################################")
+                #print(y_true[:100].numpy())
                 '''
                 if stud_step < self.args.generator_steps_per_iter:
                     grads_and_vars = list(zip(grads, self.generator_model.trainable_variables))
