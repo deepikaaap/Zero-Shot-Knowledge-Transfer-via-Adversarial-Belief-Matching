@@ -17,6 +17,7 @@ import tensorflow.keras.backend as TK
 import logging
 from sklearn.metrics import confusion_matrix
 
+
 def compute_attention(student_activations_list, teacher_activations_list, beta):
     if len(student_activations_list) != len(teacher_activations_list):
         raise Exception('Teacher should have equal num of activations as student!')
@@ -90,27 +91,24 @@ class ZeroShotKTSolver():
         # Learning rate schedulers
         self.optimizer_generator = tf.compat.v1.train.AdamOptimizer(learning_rate=self.args.generator_learning_rate)
         self.optimizer_student = tf.compat.v1.train.AdamOptimizer(learning_rate=self.args.student_learning_rate)
-        self.generator_global_step = tf.compat.v1.train.get_or_create_global_step()
-        self.student_global_step = tf.compat.v1.train.get_or_create_global_step()
+
         self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
         self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
         # Compiling student model
         self.student_model.compile(optimizer=self.optimizer_student, loss="kullback_leibler_divergence",
-                                  metrics=['accuracy'])
-
+                                   metrics=['accuracy'])
 
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
-        total_iterations = int(np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter))
+        total_iterations = 1000
+        # int(np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter))
         logging.debug("Starting to take iteration steps..")
         # counter for iteration steps:
         for current_iteration in range(total_iterations):
-            self.generator_model.optimizer = self.optimizer_generator
-            self.student_model.optimizer = self.optimizer_student
-
-            self.generator_model.optimizer._lr = self.scheduler_generator.find_current_learning_rate(current_iteration)
-            self.student_model.optimizer._lr = self.scheduler_student.find_current_learning_rate(current_iteration)
+            self.optimizer_generator.learning_rate = self.scheduler_generator.find_current_learning_rate(
+                current_iteration)
+            self.optimizer_student.learning_rate = self.scheduler_student.find_current_learning_rate(current_iteration)
 
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
@@ -120,21 +118,23 @@ class ZeroShotKTSolver():
                 with tf.GradientTape() as gen_tape, tf.GradientTape() as stud_tape:
                     # self.generator_model(gen_input) - Gets the forward pass output of the generator model
                     if stud_step < self.args.generator_steps_per_iter:
-                        gen_loss = -1 * Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                                          tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
-                                                                                batch_size=self.args.batch_size, steps=1),
-                                                     (1, -1)))
+                        gen_loss = -1 * Loss.KLD(
+                            tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
+                            tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
+                                                                  batch_size=self.args.batch_size, steps=1),
+                                       (1, -1)))
                         grads = gen_tape.gradient(gen_loss, self.generator_model.trainable_variables)
-                        grads, _ = tf.clip_by_global_norm(grads, 5)
+                        grads = [tf.clip_by_value(g, 1, 5) for g in grads]
 
                     stud_loss = Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
                                          tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
-                                                    batch_size=self.args.batch_size, steps=1), (1, -1)))
-
+                                                                               batch_size=self.args.batch_size,
+                                                                               steps=1), (1, -1)))
+                print(stud_loss.numpy())
                 student_grads = stud_tape.gradient(stud_loss, self.student_model.trainable_variables)
-                student_grads, _ = tf.clip_by_global_norm(student_grads, 5)
+                student_grads = [tf.clip_by_value(g, 1, 5) for g in student_grads]
 
-                #Try this to make sure that the teacher model is loaded properly!!!
+                # Try this to make sure that the teacher model is loaded properly!!!
                 ''' 
                 y_prede=tf.argmax(self.teacher_model.predict(self.test_batches[0][0], batch_size=10000, steps=1),axis=1)
                 y_true= tf.argmax(self.test_batches[0][1],axis=1)
@@ -151,4 +151,14 @@ class ZeroShotKTSolver():
                                                  len(self.test_batches[0][0]))
             print('Test loss : %0.5f' % (scores[0]))
             print('Test accuracy = %0.5f' % (scores[1]))
+
+            y_pred = tf.argmax(
+                self.student_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
+                axis=1).numpy()
+            y_true = tf.argmax(self.test_batches[0][1], axis=1).numpy()
+
+            print(y_pred)
+            print(y_true)
+
+
 
