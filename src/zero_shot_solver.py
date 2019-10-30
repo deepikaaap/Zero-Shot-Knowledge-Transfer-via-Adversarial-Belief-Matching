@@ -77,7 +77,7 @@ class ZeroShotKTSolver():
         else:
             # Build student and generator model objects
             if self.args.student_network_model == 'WResNet':
-                self.student = WideResNet('he_normal', 'uniform', 0.0, self.args.student_learning_rate,
+                self.student = WideResNet('he_normal', 'zeros', 0.0, self.args.student_learning_rate,
                                           0.0005, 0.1)
                 self.student_model = self.student.build_wide_resnet(self.args.input_shape,
                                                                     nb_classes=nb_classes,
@@ -96,7 +96,7 @@ class ZeroShotKTSolver():
         self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
         # Compiling student model
-        self.student_model.compile(optimizer=self.optimizer_student, loss="kullback_leibler_divergence",
+        self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
                                    metrics=['accuracy'])
 
     def run(self):
@@ -112,30 +112,38 @@ class ZeroShotKTSolver():
 
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
+            # [print(g) for g in self.generator_model(gen_input)]
             logging.debug("In iteration:", current_iteration)
 
             for stud_step in range(0, self.args.student_steps_per_iter):
                 with tf.GradientTape() as gen_tape, tf.GradientTape() as stud_tape:
                     # self.generator_model(gen_input) - Gets the forward pass output of the generator model
                     if stud_step < self.args.generator_steps_per_iter:
-                        gen_loss = -1 * Loss.KLD(
-                            tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                            tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
-                                                                  batch_size=self.args.batch_size, steps=1),
-                                       (1, -1)))
+                        gen_loss = -1 * Loss.KLD(tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
+                                                                                       batch_size=self.args.batch_size,
+                                                                                       steps=1),
+                                                            (1, -1)),
+                                                 tf.reshape(self.student_model(self.generator_model(gen_input)),
+                                                            (1, -1)))
                         grads = gen_tape.gradient(gen_loss, self.generator_model.trainable_variables)
-                        grads = [tf.clip_by_value(g, 1, 5) for g in grads]
+                        grads = [tf.clip_by_value(g, -5, 5) for g in grads]
 
-                    stud_loss = Loss.KLD(tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)),
-                                         tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
+                    stud_loss = Loss.KLD(tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
                                                                                batch_size=self.args.batch_size,
-                                                                               steps=1), (1, -1)))
-                print(stud_loss.numpy())
+                                                                               steps=1), (1, -1)),
+                                         tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)))
+                # print(stud_loss.numpy())
                 student_grads = stud_tape.gradient(stud_loss, self.student_model.trainable_variables)
-                student_grads = [tf.clip_by_value(g, 1, 5) for g in student_grads]
-
-                # Try this to make sure that the teacher model is loaded properly!!!
-                ''' 
+                student_grads = [tf.clip_by_value(g, -5, 5) for g in student_grads]
+                '''
+                print("GEN GRAD")
+                [print(g.numpy()) for g in grads]
+                print("###########################################################")
+                print("STUD GRADS")
+                [print(g.numpy()) for g in student_grads]
+                print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+                #Try this to make sure that the teacher model is loaded properly!!!
+            ' 
                 y_prede=tf.argmax(self.teacher_model.predict(self.test_batches[0][0], batch_size=10000, steps=1),axis=1)
                 y_true= tf.argmax(self.test_batches[0][1],axis=1)
                 #print(y_prede[:100].numpy())
@@ -156,9 +164,13 @@ class ZeroShotKTSolver():
                 self.student_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
                 axis=1).numpy()
             y_true = tf.argmax(self.test_batches[0][1], axis=1).numpy()
+            y_teacher = tf.argmax(
+                self.teacher_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
+                axis=1).numpy()
 
-            print(y_pred)
-            print(y_true)
+            # print(y_pred)
+            # print(y_true)
+            # print(y_teacher)
 
 
 
