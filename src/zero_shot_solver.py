@@ -96,8 +96,8 @@ class ZeroShotKTSolver():
         self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
         # Compiling student model
-        self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
-                                   metrics=['accuracy'])
+        # self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
+        #                            metrics=['accuracy'])
 
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
@@ -155,10 +155,10 @@ class ZeroShotKTSolver():
                     self.optimizer_generator.apply_gradients(grads_and_vars)
                 student_grads_and_vars = list(zip(student_grads, self.student_model.trainable_variables))
                 self.optimizer_student.apply_gradients(student_grads_and_vars)
-            scores = self.student_model.evaluate(self.test_batches[0][0], self.test_batches[0][1],
-                                                 len(self.test_batches[0][0]))
-            print('Test loss : %0.5f' % (scores[0]))
-            print('Test accuracy = %0.5f' % (scores[1]))
+            # scores = self.student_model.evaluate(self.test_batches[0][0], self.test_batches[0][1],
+            #                                      len(self.test_batches[0][0]))
+            # print('Test loss : %0.5f' % (scores[0]))
+            # print('Test accuracy = %0.5f' % (scores[1]))
 
             y_pred = tf.argmax(
                 self.student_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
@@ -167,6 +167,10 @@ class ZeroShotKTSolver():
             y_teacher = tf.argmax(
                 self.teacher_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
                 axis=1).numpy()
+
+            corrects = np.where(y_pred - y_true == 0)
+            accuracy_ = len(corrects[0]) / len(self.test_batches[0][0])
+            print("Accuracy = ", accuracy_)
 
             # print(y_pred)
             # print(y_true)
