@@ -26,7 +26,7 @@ class WideResNet():
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
 
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
-                               gamma_initializer=self.gamma_initializer)(x)
+                               gamma_initializer=self.gamma_initializer,beta_initializer='zeros')(x)
         x = Activation('relu')(x)
 
         x = Conv2D(base * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
@@ -48,7 +48,7 @@ class WideResNet():
         channel_axis = -1
 
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
-                               gamma_initializer=self.gamma_initializer)(input)
+                               beta_initializer='zeros',gamma_initializer=self.gamma_initializer)(input)
         x = Activation('relu')(x)
         x = Conv2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
                           kernel_regularizer=l2(self.weight_decay),
@@ -57,7 +57,7 @@ class WideResNet():
         if self.dropout > 0.0: x = Dropout(self.dropout)(x)
 
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
-                               gamma_initializer=self.gamma_initializer)(x)
+                               gamma_initializer=self.gamma_initializer,beta_initializer='zeros')(x)
         x = Activation('relu')(x)
         x = Conv2D(channels * k, (3, 3), padding='same', kernel_initializer=self.kernel_initializer,
                           kernel_regularizer=l2(self.weight_decay),
@@ -72,7 +72,7 @@ class WideResNet():
 
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
-                               gamma_initializer=self.gamma_initializer)(x)
+                               gamma_initializer=self.gamma_initializer,beta_initializer='zeros')(x)
         x = Activation('relu')(x)
 
         return x
@@ -89,7 +89,7 @@ class WideResNet():
                           use_bias=False)(ip)
         channel_axis = 1 if K.image_data_format() == "channels_first" else -1
         x = BatchNormalization(axis=channel_axis, momentum=self.momentum, epsilon=self.epsilon,
-                               gamma_initializer=self.gamma_initializer)(x)
+                               gamma_initializer=self.gamma_initializer,beta_initializer='zeros')(x)
         x = Activation('relu')(x)
 
         # 1 Network Block
@@ -107,7 +107,7 @@ class WideResNet():
         x = AveragePooling2D((8, 8))(x)
         x = Flatten()(x)
 
-        x = Dense(nb_classes, kernel_regularizer=l2(self.weight_decay), activation='softmax')(x)
+        x = Dense(nb_classes,bias_initializer='zeros', kernel_regularizer=l2(self.weight_decay))(x)
 
         model = Model(ip, x)
 

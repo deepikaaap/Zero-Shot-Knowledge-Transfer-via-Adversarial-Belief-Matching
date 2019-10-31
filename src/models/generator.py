@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, Conv2DTranspose
+from tensorflow.keras.layers import Conv2D, UpSampling2D
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import LeakyReLU, Input, Reshape
 from tensorflow.keras.layers import BatchNormalization
@@ -15,17 +15,19 @@ class Generator():
     def build_generator_model(self):
 #         ip = Input(shape=(self.z_dim,))
         model = Sequential()
-        n_nodes = 256 * 8 * 8
+        n_nodes = 128 * 8 * 8
         model.add(Dense(n_nodes, input_dim = self.z_dim))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Reshape((8, 8, 256)))
+        model.add(Reshape((8, 8, 128)))
         model.add(BatchNormalization(axis=-1))
         # upsample to 16x16 and convolve
-        model.add(Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same'))
+        model.add(UpSampling2D(size=(2,2)))
+        model.add(Conv2D(128, (3, 3), strides=(1, 1), padding='same'))
         model.add(LeakyReLU(alpha=0.2))
         model.add(BatchNormalization(axis=-1))
         # upsample to 32x32 and convolve
-        model.add(Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same'))
+        model.add(UpSampling2D(size=(2,2)))
+        model.add(Conv2D(64, (3, 3), strides=(1, 1), padding='same'))
         model.add(LeakyReLU(alpha=0.2))
         model.add(BatchNormalization(axis=-1))
         # output layer
@@ -47,3 +49,4 @@ if __name__ == '__main__':
     generator_model = generator_model.build_generator_model()
 
     generator_model.summary()
+    
