@@ -93,8 +93,8 @@ class ZeroShotKTSolver():
             self.generator_model = self.generator.build_generator_model()
 
         # Learning rate schedulers
-        self.optimizer_generator = tf.train.AdamOptimizer(learning_rate=self.args.generator_learning_rate)
-        self.optimizer_student = tf.train.AdamOptimizer(learning_rate=self.args.student_learning_rate)
+        self.optimizer_generator = tf.compat.v1.train.AdamOptimizer(learning_rate=self.args.generator_learning_rate)
+        self.optimizer_student = tf.compat.v1.train.AdamOptimizer(learning_rate=self.args.student_learning_rate)
 
         self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
         self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
