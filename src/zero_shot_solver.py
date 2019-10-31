@@ -71,13 +71,14 @@ class ZeroShotKTSolver():
         for layer in self.teacher_model.layers:
             layer.trainable = False
 
-        if os.path.exists(self.args.saved_student_model) and os.path.exists(self.args.saved_generator_model):
+        if False:
+            # os.path.exists(self.args.saved_student_model) and os.path.exists(self.args.saved_generator_model):
             self.student_model = load_model(os.path.join(MODEL_PATH, self.args.saved_student_model))
             self.generator_model = load_model(os.path.join(MODEL_PATH, self.args.saved_generator_model))
         else:
             # Build student and generator model objects
             if self.args.student_network_model == 'WResNet':
-                self.student = WideResNet('he_normal', 'zeros', 0.0, self.args.student_learning_rate,
+                self.student = WideResNet('he_normal', 'uniform', 0.0, self.args.student_learning_rate,
                                           0.0005, 0.1)
                 self.student_model = self.student.build_wide_resnet(self.args.input_shape,
                                                                     nb_classes=nb_classes,
@@ -97,7 +98,7 @@ class ZeroShotKTSolver():
 
         # Compiling student model
         # self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
-        #                            metrics=['accuracy'])
+        # metrics=['accuracy'])
 
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
@@ -112,7 +113,7 @@ class ZeroShotKTSolver():
 
             # Create a new sample for each iteration
             gen_input = K.random_normal((self.args.batch_size, self.args.z_dim))
-            # [print(g) for g in self.generator_model(gen_input)]
+            # [print(g) for g in tf.nn.softmax(self.teacher_model.predict(self.generator_model(gen_input)))]
             logging.debug("In iteration:", current_iteration)
 
             for stud_step in range(0, self.args.student_steps_per_iter):
@@ -121,29 +122,33 @@ class ZeroShotKTSolver():
                     if stud_step < self.args.generator_steps_per_iter:
                         gen_loss = -1 * Loss.KLD(tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
                                                                                        batch_size=self.args.batch_size,
-                                                                                       steps=1),
-                                                            (1, -1)),
-                                                 tf.reshape(self.student_model(self.generator_model(gen_input)),
-                                                            (1, -1)))
+                                                                                       steps=1), (1, -1)),
+                                                 tf.reshape(
+                                                     tf.nn.softmax(self.student_model(self.generator_model(gen_input)),
+                                                                   axis=1), (1, -1)))
                         grads = gen_tape.gradient(gen_loss, self.generator_model.trainable_variables)
-                        grads = [tf.clip_by_value(g, -5, 5) for g in grads]
+                        grads = [tf.clip_by_norm(g, 5) for g in grads]
 
                     stud_loss = Loss.KLD(tf.reshape(self.teacher_model.predict(self.generator_model(gen_input),
                                                                                batch_size=self.args.batch_size,
                                                                                steps=1), (1, -1)),
-                                         tf.reshape(self.student_model(self.generator_model(gen_input)), (1, -1)))
-                # print(stud_loss.numpy())
+                                         tf.reshape(
+                                             tf.nn.softmax(self.student_model(self.generator_model(gen_input)), axis=1),
+                                             (1, -1)))
+                print(stud_loss.numpy())
+                # print(self.student_model.trainable_variables[0].numpy())
                 student_grads = stud_tape.gradient(stud_loss, self.student_model.trainable_variables)
-                student_grads = [tf.clip_by_value(g, -5, 5) for g in student_grads]
+                student_grads = [tf.clip_by_norm(g, 5) for g in student_grads]
+
+                # print("GEN GRAD")
                 '''
-                print("GEN GRAD")
                 [print(g.numpy()) for g in grads]
                 print("###########################################################")
                 print("STUD GRADS")
                 [print(g.numpy()) for g in student_grads]
                 print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
                 #Try this to make sure that the teacher model is loaded properly!!!
-            ' 
+
                 y_prede=tf.argmax(self.teacher_model.predict(self.test_batches[0][0], batch_size=10000, steps=1),axis=1)
                 y_true= tf.argmax(self.test_batches[0][1],axis=1)
                 #print(y_prede[:100].numpy())
@@ -156,7 +161,7 @@ class ZeroShotKTSolver():
                 student_grads_and_vars = list(zip(student_grads, self.student_model.trainable_variables))
                 self.optimizer_student.apply_gradients(student_grads_and_vars)
             # scores = self.student_model.evaluate(self.test_batches[0][0], self.test_batches[0][1],
-            #                                      len(self.test_batches[0][0]))
+            # len(self.test_batches[0][0]))
             # print('Test loss : %0.5f' % (scores[0]))
             # print('Test accuracy = %0.5f' % (scores[1]))
 
@@ -168,13 +173,9 @@ class ZeroShotKTSolver():
                 self.teacher_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
                 axis=1).numpy()
 
-            corrects = np.where(y_pred - y_true == 0)
-            accuracy_ = len(corrects[0]) / len(self.test_batches[0][0])
-            print("Accuracy = ", accuracy_)
-
-            # print(y_pred)
-            # print(y_true)
-            # print(y_teacher)
+            print(y_pred)
+            print(y_true)
+            print(len(np.where(y_pred - y_true == 0)[0]) / len(self.test_batches[0][0]))
 
 
 
