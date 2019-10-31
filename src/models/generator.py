@@ -32,7 +32,7 @@ class Generator():
         model.add(BatchNormalization(axis=-1))
         # output layer
         # Maybe a ReLU layer in?
-        model.add(Conv2D(3, (3, 3), activation='tanh', padding='same'))
+        model.add(Conv2D(3, (3, 3), activation='relu', padding='same'))
         model.add(BatchNormalization(axis=-1))
         # model = Model(ip, x)
 
