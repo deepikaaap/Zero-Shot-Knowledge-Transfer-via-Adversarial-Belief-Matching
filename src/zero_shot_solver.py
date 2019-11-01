@@ -26,10 +26,10 @@ def compute_attention(student_activations_list, teacher_activations_list, beta):
         for i in range(0, len(student_activations_list)):
             # L2 norm for each activation
             stud_act_tensor = TK.variable(student_activations_list[i])
-            stud_act_norm = tf.keras.backend.l2_normalize(stud_act_tensor, axis=0)
+            stud_act_norm = tensorflow.keras.backend.l2_normalize(stud_act_tensor, axis=0)
 
             teach_act_tensor = TK.variable(teacher_activations_list[i])
-            teach_act_norm = tf.keras.backend.l2_normalize(teach_act_tensor, axis=0)
+            teach_act_norm = tensorflow.keras.backend.l2_normalize(teach_act_tensor, axis=0)
 
             difference_AT = (stud_act_norm - teach_act_norm).pow(2).mean()
 
@@ -99,15 +99,12 @@ class ZeroShotKTSolver():
         self.scheduler_generator = CosineAnnealingScheduler(1000, self.args.generator_learning_rate, 0)
         self.scheduler_student = CosineAnnealingScheduler(1000, self.args.student_learning_rate, 0)
 
-        # Compiling student model
-        # self.student_model.compile(optimizer=self.optimizer_student, loss="categorical_crossentropy",
-        # metrics=['accuracy'])
 
     def run(self):
         # We are looking to take the same number of steps on the student as was taken on the pretrained teacher.
-        total_iterations = 1000
-        # int(np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter))
+        total_iterations = int(np.ceil(self.args.teacher_total_iterations / self.args.student_steps_per_iter))
         logging.debug("Starting to take iteration steps..")
+
         # counter for iteration steps:
         for current_iteration in range(total_iterations):
             self.optimizer_generator.learning_rate = self.scheduler_generator.find_current_learning_rate(
@@ -127,12 +124,11 @@ class ZeroShotKTSolver():
                                                steps=1), axis=1))
 
                 with tf.GradientTape() as gen_tape:
-                    # self.generator_model(gen_input) - Gets the forward pass output of the generator model
                     gen_loss = tf.math.scalar_mul(-1, Loss.KLD(tf.reshape(
                         self.teacher_model.predict(self.generator_model(gen_input), batch_size=self.args.batch_size,
                                                    steps=1), (1, -1)), tf.reshape(
                         tf.nn.softmax(self.student_model(self.generator_model(gen_input)), axis=1), (1, -1))))
-                    print("GENLOSS", gen_loss.numpy())
+
                 grads = gen_tape.gradient(gen_loss, self.generator_model.trainable_variables)
                 grads = [tf.clip_by_norm(g, 5) for g in grads]
                 stddev = 1 / ((1 + current_iteration) ** 0.55)
@@ -162,7 +158,7 @@ class ZeroShotKTSolver():
                                          tf.reshape(
                                              tf.nn.softmax(self.student_model(self.generator_model(gen_input)), axis=1),
                                              (1, -1)))
-                    print("STUD LOSS", stud_loss.numpy())
+                    # print("STUD LOSS", stud_loss.numpy())
 
                 # print(self.student_model.trainable_variables[0].numpy())
                 student_grads = stud_tape.gradient(stud_loss, self.student_model.trainable_variables)
@@ -185,10 +181,9 @@ class ZeroShotKTSolver():
                 self.teacher_model.predict(self.test_batches[0][0], batch_size=self.args.batch_size, steps=1),
                 axis=1).numpy()
 
-            print(y_pred)
-            print(y_true)
-            print(y_teacher)
+            # print(y_pred)
+            # print(y_true)
+            # print(y_teacher)
+
+            # print test accuracy
             print(len(np.where(y_pred - y_true == 0)[0]) / len(self.test_batches[0][0]))
-
-
-

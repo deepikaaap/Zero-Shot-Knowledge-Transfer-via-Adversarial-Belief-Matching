@@ -1,6 +1,10 @@
 import math
 
 class CosineAnnealingScheduler():
+    """
+         To implement this class we checked this code:
+         https://github.com/4uiiurz1/keras-cosine-annealing/blob/master/cosine_annealing.py
+       """
 
     def __init__(self, T_max, eta_max, learning_rate, eta_min=0):
         super(CosineAnnealingScheduler, self).__init__()
